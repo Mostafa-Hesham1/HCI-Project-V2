@@ -2,19 +2,27 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
   Container, Typography, TextField, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle,
-  MenuItem, Select, InputLabel, FormControl, Snackbar, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, IconButton, Grid
+  MenuItem, Select, InputLabel, FormControl, Snackbar, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, IconButton, Grid, AppBar, Toolbar, Box
 } from '@mui/material';
 import MuiAlert from '@mui/material/Alert';
 import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
+import DeleteIcon from '@mui/icons-material/Delete'; // Correct import statement
 import AddIcon from '@mui/icons-material/Add'; // Correct import statement
+import HomeIcon from '@mui/icons-material/Home'; // Import Home icon
 import { styled } from '@mui/material/styles';
 import io from 'socket.io-client'; // Import socket.io-client
 import Autocomplete from '@mui/material/Autocomplete'; // Import Autocomplete
+import { useNavigate } from 'react-router-dom'; // Import useNavigate
 
 const StyledTableRow = styled(TableRow)(({ theme }) => ({
-  '&:hover': {
+  '&:nth-of-type(odd)': {
     backgroundColor: theme.palette.action.hover,
+  },
+  '&:nth-of-type(even)': {
+    backgroundColor: theme.palette.background.default,
+  },
+  '&:hover': {
+    backgroundColor: theme.palette.action.selected,
   },
   '&.Mui-selected': {
     backgroundColor: theme.palette.action.selected,
@@ -37,6 +45,7 @@ const DoctorDashboard = () => {
   const [selectedRow, setSelectedRow] = useState(0); // Add state for selected row
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false); // State for delete confirmation dialog
   const [patientToDelete, setPatientToDelete] = useState(null); // State for patient to delete
+  const navigate = useNavigate(); // Initialize useNavigate
 
   useEffect(() => {
     // Fetch patients data from the server
@@ -319,9 +328,24 @@ const DoctorDashboard = () => {
 
   return (
     <Container maxWidth="md">
-      <Typography variant="h4" gutterBottom>Doctor Dashboard</Typography>
+      <AppBar position="static" style={{ background: '#5c67f2', marginBottom: '20px' }}>
+        <Toolbar>
+          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+            Doctor Dashboard
+          </Typography>
+          <Button
+            variant="contained"
+            color="secondary"
+            startIcon={<HomeIcon />}
+            onClick={() => navigate('/')}
+            sx={{ borderRadius: 20 }}
+          >
+            Home
+          </Button>
+        </Toolbar>
+      </AppBar>
       <Grid container spacing={2} alignItems="center">
-        <Grid item xs={9}>
+        <Grid item xs={12} sm={9}>
           <Autocomplete
             freeSolo
             options={patients.map(patient => patient.name)}
@@ -332,7 +356,7 @@ const DoctorDashboard = () => {
             )}
           />
         </Grid>
-        <Grid item xs={3}>
+        <Grid item xs={12} sm={3}>
           <Button
             variant="contained"
             color="primary"
@@ -344,37 +368,39 @@ const DoctorDashboard = () => {
           </Button>
         </Grid>
       </Grid>
-      <TableContainer component={Paper} sx={{ marginTop: 2 }}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Patient Code</TableCell> {/* Add this line */}
-              <TableCell>Patient Name</TableCell>
-              <TableCell>Injury</TableCell>
-              <TableCell>Exercises</TableCell>
-              <TableCell>Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {filteredPatients.map((patient, index) => (
-              <StyledTableRow key={patient._id} selected={index === selectedRow}>
-                <TableCell>{patient.code}</TableCell> {/* Add this line */}
-                <TableCell>{patient.name}</TableCell>
-                <TableCell>{patient.injury}</TableCell>
-                <TableCell>{patient.exercises.map(ex => ex.name).join(', ')}</TableCell>
-                <TableCell>
-                  <IconButton color="primary" onClick={() => handleEditPatient(patient)}>
-                    <EditIcon />
-                  </IconButton>
-                  <IconButton color="secondary" onClick={() => handleOpenDeleteDialog(patient)}>
-                    <DeleteIcon />
-                  </IconButton>
-                </TableCell>
-              </StyledTableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+      <Box sx={{ overflowX: 'auto', mt: 2 }}>
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Patient Code</TableCell> {/* Add this line */}
+                <TableCell>Patient Name</TableCell>
+                <TableCell>Injury</TableCell>
+                <TableCell>Exercises</TableCell>
+                <TableCell>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filteredPatients.map((patient, index) => (
+                <StyledTableRow key={patient._id} selected={index === selectedRow}>
+                  <TableCell>{patient.code}</TableCell> {/* Add this line */}
+                  <TableCell>{patient.name}</TableCell>
+                  <TableCell>{patient.injury}</TableCell>
+                  <TableCell>{patient.exercises.map(ex => ex.name).join(', ')}</TableCell>
+                  <TableCell>
+                    <IconButton color="primary" onClick={() => handleEditPatient(patient)}>
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton color="secondary" onClick={() => handleOpenDeleteDialog(patient)}>
+                      <DeleteIcon />
+                    </IconButton>
+                  </TableCell>
+                </StyledTableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Box>
       <Dialog open={open} onClose={handleClose}>
         <DialogTitle>{isEditing ? 'Edit Patient' : 'Add New Patient'}</DialogTitle>
         <DialogContent>

@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from models.patient import patients_collection
+from models.injury import injuries_collection
 from bson import ObjectId
 import random
 
@@ -66,4 +67,30 @@ def update_or_delete_patient(patient_id):
             return jsonify({"message": "Patient deleted successfully"}), 200
         except Exception as e:
             return jsonify({"error": str(e)}), 500
+
+@patients_bp.route('/api/patients/<patient_id>/exercises', methods=['GET'])
+def get_patient_exercises(patient_id):
+    try:
+        patient = patients_collection.find_one({"_id": ObjectId(patient_id)})
+        if not patient:
+            return jsonify({"error": "Patient not found"}), 404
+        injury = injuries_collection.find_one({"name": patient['injury']})
+        if not injury:
+            return jsonify({"error": "Injury not found"}), 404
+        # Filter exercises based on the patient's assigned exercises
+        assigned_exercises = {ex['name']: ex for ex in patient['exercises']}
+        filtered_exercises = []
+        for ex in injury['exercises']:
+            if ex['name'] in assigned_exercises:
+                filtered_exercise = {
+                    'name': ex['name'],
+                    'description': ex['description'],
+                    'video_url': ex['video_url'],
+                    'sets': assigned_exercises[ex['name']]['sets'],
+                    'reps': assigned_exercises[ex['name']]['reps']
+                }
+                filtered_exercises.append(filtered_exercise)
+        return jsonify(filtered_exercises), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 

@@ -1,9 +1,29 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Container, Typography, AppBar, Toolbar, Button, Box, Card, CardContent } from '@mui/material';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Parallax, ParallaxProvider } from 'react-scroll-parallax';
 
 const HomeScreen = () => {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [patient, setPatient] = useState(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Check if the user is logged in
+    const loggedInPatient = JSON.parse(localStorage.getItem('patient'));
+    if (loggedInPatient) {
+      setIsLoggedIn(true);
+      setPatient(loggedInPatient);
+    }
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('patient');
+    setIsLoggedIn(false);
+    setPatient(null);
+    navigate('/');
+  };
+
   return (
     <ParallaxProvider>
       <AppBar position="static" style={{ background: '#5c67f2', width: '100%' }}>
@@ -11,12 +31,25 @@ const HomeScreen = () => {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Recovery Hub
           </Typography>
-          <Button color="inherit" component={Link} to="/doctor" sx={{ borderRadius: 20 }}>
-            Dashboard
-          </Button>
-          <Button color="inherit" component={Link} to="/exercise-tracker" sx={{ borderRadius: 20 }}>
-            Exercise Tracker
-          </Button>
+          {isLoggedIn ? (
+            <>
+              <Button color="inherit" component={Link} to="/patient-exercise-dashboard" sx={{ borderRadius: 20 }}>
+                My Exercises
+              </Button>
+              <Button color="inherit" onClick={handleLogout} sx={{ borderRadius: 20 }}>
+                Logout
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button color="inherit" component={Link} to="/doctor" sx={{ borderRadius: 20 }}>
+                Dashboard
+              </Button>
+              <Button color="inherit" component={Link} to="/login" sx={{ borderRadius: 20 }}>
+                Login
+              </Button>
+            </>
+          )}
         </Toolbar>
       </AppBar>
       <Container maxWidth="lg">
