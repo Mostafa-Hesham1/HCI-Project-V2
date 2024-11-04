@@ -29,6 +29,9 @@ using System.IO;
 using System.Drawing.Drawing2D;
 using System.Net.Sockets;
 using System.Text;
+using System.Net.Http;  // For HttpClient and StringContent
+using Newtonsoft.Json;  // For JsonConvert
+
 
 
 
@@ -48,14 +51,17 @@ public class TuioDemo : Form, TuioListener
     private int screen_height = Screen.PrimaryScreen.Bounds.Height;
     public int prev_id = -1;
     public int selected_id = 1;
+
+
     private bool fullscreen;
+    private bool firstopen = true;
     private bool verbose;
     private bool displayStretchPage = false;
     private float leftMarkerX = 0, leftMarkerY = 0;
     private float rightMarkerX = 0, rightMarkerY = 0;
     private bool isGoodStretch = false;
     private int stretchCount = 0;
-
+   // public bool patientList = false;
 
     public string serverIP = "DESKTOP-8161GCK"; // IP address of the Python server
     public int port = 8000;               // Port number matching the Python server
@@ -75,9 +81,18 @@ public class TuioDemo : Form, TuioListener
     {
 
         verbose = false;
-        fullscreen = false;
-        width = window_width;
-        height = window_height;
+        fullscreen = true;
+        width = screen_width;
+        height = screen_height;
+
+        window_left = this.Left;
+        window_top = this.Top;
+
+        this.FormBorderStyle = FormBorderStyle.None;
+        this.Left = 0;
+        this.Top = 0;
+        this.Width = screen_width;
+        this.Height = screen_height;
 
         this.ClientSize = new System.Drawing.Size(width, height);
         this.Name = "TuioDemo";
@@ -89,11 +104,12 @@ public class TuioDemo : Form, TuioListener
         this.SetStyle(ControlStyles.AllPaintingInWmPaint |
                         ControlStyles.UserPaint |
                         ControlStyles.DoubleBuffer, true);
-
         objectList = new Dictionary<long, TuioObject>(128);
         cursorList = new Dictionary<long, TuioCursor>(128);
         blobList = new Dictionary<long, TuioBlob>(128);
         readpatient();
+        DrawPatientTable(); // Populate the cached bitmap with the table
+
         client = new TuioClient(port);
         client.addTuioListener(this);
 
@@ -109,7 +125,7 @@ public class TuioDemo : Form, TuioListener
     private void Form_KeyDown(object sender, System.Windows.Forms.KeyEventArgs e)
     {
 
-        if (e.KeyData == Keys.F1)
+        if (e.KeyData == Keys.F1 )
         {
             if (fullscreen == false)
             {
@@ -164,7 +180,7 @@ public class TuioDemo : Form, TuioListener
     List<patient> patients = new List<patient>();
     void readpatient()
     {
-        StreamReader SR = new StreamReader("Users.txt");
+      StreamReader SR = new StreamReader("Users.txt");
         while (!SR.EndOfStream)
         {
 
@@ -182,6 +198,7 @@ public class TuioDemo : Form, TuioListener
     }
     private void Form_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
+
         client.removeTuioListener(this);
 
         client.disconnect();
@@ -201,6 +218,10 @@ public class TuioDemo : Form, TuioListener
     {
         if (verbose) Console.WriteLine("set obj " + o.SymbolID + " " + o.SessionID + " " + o.X + " " + o.Y + " " + o.Angle + " " + o.MotionSpeed + " " + o.RotationSpeed + " " + o.MotionAccel + " " + o.RotationAccel);
 
+        if (o.SymbolID == 1)
+        {  // Directly handle rotation ID
+            UpdateSelectedIdBasedOnRotation(o);
+        }
         if (o.SymbolID == 22) // Left marker
         {
             leftMarkerX = o.getX() * width;
@@ -232,6 +253,7 @@ public class TuioDemo : Form, TuioListener
             Invalidate(); // Refresh the form to update UI with new information
         }
     }
+
 
     public void removeTuioObject(TuioObject o)
     {
@@ -293,40 +315,71 @@ public class TuioDemo : Form, TuioListener
     {
         Invalidate();
     }
-    int f = 0;
+
+    // Declare the flag and cached bitmap
+    public bool patientList = false;
+    public Bitmap tableBitmap = null;
+
+    public void DrawPatientTable()
+    {
+        // Define the size of the table
+        int tableWidth = 600;
+        int tableHeight = 400;
+
+        // Create the bitmap for caching the table
+        tableBitmap = new Bitmap(tableWidth, tableHeight);
+        using (Graphics g = Graphics.FromImage(tableBitmap))
+        {
+            Font headerFont = new Font("Arial", 14, FontStyle.Bold);
+            Font tableFont = new Font("Arial", 12);
+            Brush tableBrush = Brushes.White;
+            Brush headerBrush = Brushes.Yellow;
+
+            float x = 0;
+            float y = 0;
+            float rowHeight = 30f;
+             float colWidth = 150f;
+             float padding = 10f;
+            Pen pen = new Pen(Color.Black, 2);
+
+            string[] headers = { "ID", "Name", "Injury", "Exercise" };
+            for (int j = 0; j < headers.Length; j++)
+            {
+                g.DrawString(headers[j], headerFont, headerBrush, new PointF(x + (j * colWidth) + padding, y + padding));
+            }
+
+            g.DrawLine(pen, x, y + rowHeight, x + (colWidth * headers.Length), y + rowHeight);
+            for (int i = 0; i < patients.Count; i++)
+            {
+                patient p = patients[i];
+                string[] patientInfo = { p.id, p.name, p.inj, p.exer };
+                for (int j = 0; j < patientInfo.Length; j++)
+                {
+                    g.DrawString(patientInfo[j], tableFont, tableBrush, new PointF(x + (j * colWidth) + padding, y + ((i + 1) * rowHeight) + padding));
+                }
+                g.DrawLine(pen, x, y + ((i + 2) * rowHeight), x + (colWidth * headers.Length), y + ((i + 2) * rowHeight)); // Horizontal border
+            }
+
+            for (int j = 0; j <= headers.Length; j++)
+            {
+                g.DrawLine(pen, x + (j * colWidth), y, x + (j * colWidth), y + (rowHeight * (patients.Count + 1))); // Vertical border
+            }
+
+            pen.Dispose();
+        }
+    }
+
     protected override void OnPaintBackground(PaintEventArgs pevent)
     {
         // Getting the graphics object
         Graphics g = pevent.Graphics;
         g.FillRectangle(bgrBrush, new Rectangle(0, 0, width, height));
+
         if (displayStretchPage)
         {
             string stretchStatus = isGoodStretch ? "Good Stretch! Count: " + stretchCount : "Keep Stretching...";
             g.DrawString(stretchStatus, font, fntBrush, new PointF(10, 40)); // Display stretching status
         }
-
-        // draw the cursor path
-        if (cursorList.Count > 0)
-        {
-            lock (cursorList)
-            {
-                foreach (TuioCursor tcur in cursorList.Values)
-                {
-                    List<TuioPoint> path = tcur.Path;
-                    TuioPoint current_point = path[0];
-
-                    for (int i = 0; i < path.Count; i++)
-                    {
-                        TuioPoint next_point = path[i];
-                        g.DrawLine(curPen, current_point.getScreenX(width), current_point.getScreenY(height), next_point.getScreenX(width), next_point.getScreenY(height));
-                        current_point = next_point;
-                    }
-                    g.FillEllipse(curBrush, current_point.getScreenX(width) - height / 100, current_point.getScreenY(height) - height / 100, height / 50, height / 50);
-                    g.DrawString(tcur.CursorID + "", font, fntBrush, new PointF(tcur.getScreenX(width) - 10, tcur.getScreenY(height) - 10));
-                }
-            }
-        }
-
         string[,] exercisesTable = {
                                 {"ID", "Name", "Leg Injuries", "Exercise"},
                                 {"1", "John Doe", "Knee Sprain", "Quad Stretch"},
@@ -341,15 +394,13 @@ public class TuioDemo : Form, TuioListener
                                 {"10", "Olivia Moore", "Hip Flexor Strain", "Hip Flexor Stretch"},
                                 {"11", "Liam Martinez", "Patellar Tendonitis", "Wall Squats"},
                                 {"12", "Mia Rodriguez", "Piriformis Syndrome", "Piriformis Stretch"},
-                                {"13", "William King", "ACL Tear", "Balance Exercises"},
-                                {"14", "Isabella Perez", "Meniscus Tear", "Step-Ups"},
-                                {"15", "Henry Turner", "Torn Hamstring", "Hamstring Stretch"},
-                                {"16", "Ava Scott", "Plantar Fasciitis", "Towel Stretch"},
-                                {"17", "Alexander Green", "Sciatica", "Pelvic Tilt"},
-                                {"18", "Charlotte Baker", "Hip Labral Tear", "Clamshell Exercise"},
-                                {"19", "Benjamin Hill", "IT Band Friction", "Foam Rolling"}
                             };
-        // Draw the objects
+        if (patientList && tableBitmap != null)
+        {
+            g.DrawImage(tableBitmap, new Point(50, 100)); // Make sure tableBitmap is drawn here
+        }
+
+        // Draw other TUIO objects
         if (objectList.Count > 0)
         {
             lock (objectList)
@@ -363,185 +414,116 @@ public class TuioDemo : Form, TuioListener
                     // Draw the object rectangle
                     g.FillRectangle(objBrush, new Rectangle(ox - size / 2, oy - size / 2, size, size));
                     g.DrawString(tobj.SymbolID.ToString(), font, fntBrush, new PointF(ox - 10, oy - 10));
+                    g.DrawString("Selected ID", font, fntBrush, new PointF(this.Width - 100, 80));
+                    g.DrawString(selected_id.ToString(), font, fntBrush, new PointF(this.Width - 100, 100));
 
                     // Handling the drawing and logic for specific Symbol IDs
                     switch (tobj.SymbolID)
                     {
                         case 0:
+                            patientList = true;
+                            float y = 0; // Starting y position for the table
+                            float rowHeight = 30f;
+                            float padding = 10f;
+                            float colWidth = 150f; // Width of each column
 
-                            g.DrawString("Selected ID", font, fntBrush, new PointF(this.Width - 100, 80));
-                            g.DrawString(selected_id.ToString(), font, fntBrush, new PointF(this.Width - 100, 100));
-
-                            // Check if the ID has changed
-                            if (tobj.SymbolID != prev_id)
-                            {
-                                flag = 1;
-                                if (f == 0)
-                                {
-                                    SendMarkerData("the table displayed");
-                                }
-                                f = 1;
-                                prev_id = tobj.SymbolID;
-
-                            }
+                            Font tableFont = new Font("Arial", 12);
+                            Brush tableBrush = Brushes.Black;
                             UpdateSelectedIdBasedOnRotation(tobj);
+                            for (int i = 0; i < patients.Count; i++)
+                            {
+                                patient p = patients[i];
+                                int currentPatientId = int.Parse(p.id); 
+
+                                if (currentPatientId == selected_id)
+                                {
+                                    g.FillRectangle(Brushes.Red, new RectangleF(50, 100 + (i + 1) * rowHeight, 600, rowHeight)); 
+                                    string[] patientInfo = { p.id, p.name, p.inj, p.exer };
+                                    for (int j = 0; j < patientInfo.Length; j++)
+                                        g.DrawString(patientInfo[j], tableFont, tableBrush, new PointF(50 + (j * colWidth) + padding, 100 + ((i + 1) * rowHeight) + padding));
+                                }
+                            }
                             break;
 
                         case 5:
-                            if (tobj.SymbolID != prev_id)
-                            {
-                                prev_id = tobj.SymbolID;
-
-                                string rowData = $"Selected ID: {exercisesTable[selected_id, 0]}, " + // ID
-                                        $"Name: {exercisesTable[selected_id, 1]}, " + // Name
-                                        $"Leg Injury: {exercisesTable[selected_id, 2]}, " + // Leg Injuries
-                                        $"Exercise: {exercisesTable[selected_id, 3]}"; // Exercise
-                                SendMarkerData("the selected patient :" + rowData);
-
-                            }
-
+                            // Hide the table when another SymbolID appears
+                            patientList = false;
+                            string rowData = $"Selected ID: {exercisesTable[selected_id, 0]}, " +
+                                             $"Name: {exercisesTable[selected_id, 1]}, " +
+                                             $"Leg Injury: {exercisesTable[selected_id, 2]}, " +
+                                             $"Exercise: {exercisesTable[selected_id, 3]}";
+                            SendMarkerData("the selected patient :" + rowData);
                             break;
+
                         case 2:
-                            if (tobj.SymbolID != prev_id)
-                            {
-                                prev_id = tobj.SymbolID;
-                            }
+                            // Additional handling for SymbolID 2, if necessary
+                            patientList = false;
                             break;
-
-                        default:
-                            if (tobj.SymbolID != prev_id)
-                            {
-                                prev_id = tobj.SymbolID;
-                            }
-                            continue;
                     }
-                }
-                if (flag == 1)
-                {
-                    Font headerFont = new Font("Arial", 14, FontStyle.Bold);
-                    Font tableFont = new Font("Arial", 12);
-                    Brush tableBrush = Brushes.White;
-                    Brush headerBrush = Brushes.Yellow;
-
-                    float x = 0;
-                    float y = 0;
-                    float rowHeight = 30f;
-                    float colWidth = 150f;
-                    float padding = 10f;
-                    Pen pen = new Pen(Color.Black, 2);
-
-                    // Drawing the header
-                    string[] headers = { "ID", "Name", "Injury", "Exercise" };
-                    for (int j = 0; j < headers.Length; j++)
-                    {
-                        g.DrawString(headers[j], headerFont, headerBrush, new PointF(x + (j * colWidth) + padding, y + padding));
-                    }
-
-                    // Draw a border line under the header
-                    g.DrawLine(pen, x, y + rowHeight, x + (colWidth * headers.Length), y + rowHeight);
-
-                    // Drawing the patients from the list
-                    for (int i = 0; i < patients.Count; i++)
-                    {
-                        patient p = patients[i];
-                        // Highlight the selected patient row
-                        if (p.id == selected_id.ToString())
-                        {
-                            g.FillRectangle(Brushes.Red, new RectangleF(x, y + ((i + 1) * rowHeight), colWidth * headers.Length, rowHeight));
-                        }
-                        string[] patientInfo = { p.id, p.name, p.inj, p.exer };
-                        for (int j = 0; j < patientInfo.Length; j++)
-                        {
-                            // Draw each cell with some padding
-                            g.DrawString(patientInfo[j], tableFont, tableBrush, new PointF(x + (j * colWidth) + padding, y + ((i + 1) * rowHeight) + padding));
-                        }
-                        // Draw a border line between rows for clarity
-                        g.DrawLine(pen, x, y + ((i + 2) * rowHeight), x + (colWidth * headers.Length), y + ((i + 2) * rowHeight)); // Horizontal border
-                    }
-
-                    // Draw vertical borders for the entire table
-                    for (int j = 0; j <= headers.Length; j++)
-                    {
-                        g.DrawLine(pen, x + (j * colWidth), y, x + (j * colWidth), y + (rowHeight * (patients.Count + 1))); // Vertical border
-                    }
-
-                    pen.Dispose();
-                }
-            }
-
-        }
-
-        // Draw the blobs (if necessary)
-        if (blobList.Count > 0)
-        {
-            lock (blobList)
-            {
-                foreach (TuioBlob tblb in blobList.Values)
-                {
-                    int bx = tblb.getScreenX(width);
-                    int by = tblb.getScreenY(height);
-                    float bw = tblb.Width * width;
-                    float bh = tblb.Height * height;
-
-                    g.TranslateTransform(bx, by);
-                    g.RotateTransform((float)(tblb.Angle / Math.PI * 180.0f));
-                    g.TranslateTransform(-bx, -by);
-
-                    g.FillEllipse(blbBrush, bx - bw / 2, by - bh / 2, bw, bh);
-
-                    g.TranslateTransform(bx, by);
-                    g.RotateTransform(-1 * (float)(tblb.Angle / Math.PI * 180.0f));
-                    g.TranslateTransform(-bx, -by);
-
-                    g.DrawString(tblb.BlobID + "", font, fntBrush, new PointF(bx, by));
                 }
             }
         }
     }
+
     private float previousAngle = 0;
+    private float smoothingFactor = 5.0f; // Adjust this value to change sensitivity
+    private float minAngleDifference = 5.0f; // Minimum angle to consider a rotation
+    private DateTime lastRotationTime = DateTime.Now; // Last time the rotation was updated
+
     private void UpdateSelectedIdBasedOnRotation(TuioObject tobj)
     {
-        // Get the current angle of the marker
-        float currentAngle = tobj.Angle * (180 / (float)Math.PI); // Convert radians to degrees
-
-        // Normalize angles to be within [0, 360)
+        float currentAngle = tobj.Angle * (180 / (float)Math.PI);  // Convert radians to degrees
         currentAngle = NormalizeAngle(currentAngle);
-        previousAngle = NormalizeAngle(previousAngle);
-
-        // Calculate the difference
         float angleDifference = currentAngle - previousAngle;
 
-        // Check if the difference indicates a right (clockwise) rotation
-        if (angleDifference > 10) // Adjust threshold as necessary
+        // Ensure that the difference is greater than the smoothing factor
+        if (Math.Abs(angleDifference) > minAngleDifference)
         {
-            selected_id++; // Increment the selected ID
-            SendMarkerData("The selected patient updated");
-            if (selected_id > patients.Count) // Reset if it exceeds the number of exercises
+            // Introduce a cooldown period for rotation changes
+            if ((DateTime.Now - lastRotationTime).TotalMilliseconds > 200) // 200ms cooldown
             {
-                selected_id = 1; // Reset to the first exercise
-            }
-        }
-        // Check if the difference indicates a left (counterclockwise) rotation
-        else if (angleDifference < -10) // Adjust threshold as necessary
-        {
-            selected_id--; // Decrement the selected ID
-            SendMarkerData("The selected patient updated");
-            if (selected_id < 1) // Reset if it goes below 1
-            {
-                selected_id = patients.Count; // Reset to the last exercise
+                if (angleDifference > 0)
+                {
+                    selected_id = (selected_id + 1) % 13;  // Adjust for 12 patients
+                    SendRotationEventAsync("rotate_right");
+                }
+                else
+                {
+                    selected_id = (selected_id - 1 + 13) % 13;  // Wrap around if negative
+                    SendRotationEventAsync("rotate_left");
+                }
+
+                // Invalidate to trigger redraw
+                this.Invalidate();
+                lastRotationTime = DateTime.Now; // Update last rotation time
             }
         }
 
-        // Optional: Add logging for debugging
-        Console.WriteLine($"Current Angle: {currentAngle}, Previous Angle: {previousAngle}, Selected ID: {selected_id}");
-
-        // Update previous angle for the next frame
-        previousAngle = currentAngle;
+        previousAngle = currentAngle;  // Update previous angle
     }
+
+
+    public async void SendRotationEventAsync(string rotationDirection)
+    {
+        try
+        {
+            string message = rotationDirection + "\n";
+            byte[] data = Encoding.UTF8.GetBytes(message);
+
+            await stream.WriteAsync(data, 0, data.Length);
+            Console.WriteLine($"Sent rotation event: {rotationDirection}");
+            await stream.FlushAsync(); // Flush to ensure data is sent immediately
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine("Socket error: " + e.Message);
+        }
+    }
+   
+
 
     private float NormalizeAngle(float angle)
     {
-        // Normalize the angle to the range [0, 360)
         while (angle < 0) angle += 360;
         while (angle >= 360) angle -= 360;
         return angle;
@@ -589,7 +571,6 @@ public class TuioDemo : Form, TuioListener
         }
         catch (Exception e)
         {
-            Console.WriteLine("Exception: {0}", e);
         }
     }
 }
