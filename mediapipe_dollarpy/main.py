@@ -8,6 +8,33 @@ from src.frame_extractor import extract_frames
 mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
 
+
+def is_peace_sign(hand_landmarks):
+    index_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
+    index_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP]
+    middle_tip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_TIP]
+    middle_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_MCP]
+    ring_tip = hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_TIP]
+    ring_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_MCP]
+    pinky_tip = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_TIP]  # Corrected attribute
+    pinky_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_MCP]
+    thumb_tip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
+    thumb_ip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_IP]
+
+    # Check if index and middle fingers are extended
+    is_index_extended = index_tip.y < index_mcp.y
+    is_middle_extended = middle_tip.y < middle_mcp.y
+
+    # Check if ring and pinky fingers are not extended
+    is_ring_folded = ring_tip.y > ring_mcp.y
+    is_pinky_folded = pinky_tip.y > pinky_mcp.y
+
+    # Check if thumb is not extended
+    is_thumb_folded = thumb_tip.x < thumb_ip.x
+
+    return is_index_extended and is_middle_extended and is_ring_folded and is_pinky_folded and is_thumb_folded
+
+
 def is_thumbs_up(hand_landmarks):
     thumb_tip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
     thumb_ip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_IP]
@@ -24,13 +51,14 @@ def is_thumbs_up(hand_landmarks):
 
     # Check if other fingers are not extended
     are_other_fingers_not_extended = (
-        index_mcp.y < hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP].y and
-        middle_mcp.y < hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_TIP].y and
-        ring_mcp.y < hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_TIP].y and
-        pinky_mcp.y < hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_TIP].y
+            index_mcp.y < hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP].y and
+            middle_mcp.y < hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_TIP].y and
+            ring_mcp.y < hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_TIP].y and
+            pinky_mcp.y < hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_TIP].y
     )
 
     return is_thumb_extended and are_other_fingers_not_extended
+
 
 def capture_webcam_video():
     cap = cv2.VideoCapture(0)
@@ -56,6 +84,7 @@ def capture_webcam_video():
     cap.release()
     cv2.destroyAllWindows()
     return frames
+
 
 def main():
     # Step 1: Extract and Calculate Angles for Reference Video
@@ -86,6 +115,7 @@ def main():
         cv2.destroyAllWindows()
 
     print(f'User exercise match score: {score}')
+
 
 if __name__ == '__main__':
     main()
