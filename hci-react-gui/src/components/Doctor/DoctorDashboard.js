@@ -5,14 +5,20 @@ import {
   MenuItem, Select, InputLabel, FormControl, Snackbar, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, IconButton, Grid, AppBar, Toolbar, Box
 } from '@mui/material';
 import MuiAlert from '@mui/material/Alert';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete'; // Correct import statement
 import AddIcon from '@mui/icons-material/Add'; // Correct import statement
 import HomeIcon from '@mui/icons-material/Home'; // Import Home icon
 import { styled } from '@mui/material/styles';
-import io from 'socket.io-client'; // Import socket.io-client
 import Autocomplete from '@mui/material/Autocomplete'; // Import Autocomplete
 import { useNavigate } from 'react-router-dom'; // Import useNavigate
+import MoreVertIcon from '@mui/icons-material/MoreVert'; // Import MoreVert icon
+import CircularMenu from './CircularMenu'; // Import CircularMenu
+import io from 'socket.io-client'; // Add this import
+
+const hoverAndSelectedColor = '#ff9800'; // Change to a different color (e.g., orange)
+const brighterBorderColor = '#ffcc80'; // Adjust the brighter border color accordingly
+const buttonHoverColor = '#ff5722'; // Change to a different hover color (e.g., deep orange)
+const animationDuration = '0.3s'; // Define animation duration
+const hoverBorderColor = '#42a5f5'; // Define a light blue hover border color
 
 const StyledTableRow = styled(TableRow)(({ theme }) => ({
   '&:nth-of-type(odd)': {
@@ -23,18 +29,36 @@ const StyledTableRow = styled(TableRow)(({ theme }) => ({
   },
   '&:hover': {
     backgroundColor: theme.palette.action.selected,
+    border: `2px solid ${hoverBorderColor}`, // Light blue border color for hovered row
+    transition: `border ${animationDuration} ease-in-out`, // Add animation
   },
   '&.Mui-selected': {
     backgroundColor: theme.palette.action.selected,
+    border: `2px solid ${hoverAndSelectedColor}`, // Border for selected row
+  },
+  '&.Mui-hovered, &.Mui-focused': { // Add hover and focus color
+    backgroundColor: theme.palette.action.hover,
+    border: `2px solid ${hoverBorderColor}`, // Light blue border color for hovered row
+    transition: `border ${animationDuration} ease-in-out`, // Add animation
+  },
+}));
+
+const StyledButton = styled(Button)(({ theme }) => ({
+  backgroundColor: theme.palette.primary.main,
+  '&:hover': {
+    backgroundColor: buttonHoverColor, // More suitable hover color for buttons
+    border: `2px solid ${hoverBorderColor}`, // Light blue border color for hovered button
+    transition: `border ${animationDuration} ease-in-out`, // Add animation
+  },
+  '&.Mui-selected': {
+    backgroundColor: hoverAndSelectedColor, // Highlight selected button
+    border: `2px solid ${hoverBorderColor}`, // Light blue border color for selected button
+    transition: `border ${animationDuration} ease-in-out`, // Add animation
   },
 }));
 
 const DoctorDashboard = () => {
   const [patients, setPatients] = useState([]);
-  const [filteredPatients, setFilteredPatients] = useState([]); // State for filtered patients
-  const [selectedPatient, setSelectedPatient] = useState(null); // State for selected patient
-  const [open, setOpen] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
   const [currentPatientId, setCurrentPatientId] = useState(null);
   const [newPatient, setNewPatient] = useState({ name: '', injury: '', exercises: [] });
   const [injuries, setInjuries] = useState([]);
@@ -42,10 +66,20 @@ const DoctorDashboard = () => {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState('success');
-  const [selectedRow, setSelectedRow] = useState(0); // Add state for selected row
+  const [selectedRow, setSelectedRow] = useState(null); // Initialize selectedRow to null
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false); // State for delete confirmation dialog
   const [patientToDelete, setPatientToDelete] = useState(null); // State for patient to delete
   const navigate = useNavigate(); // Initialize useNavigate
+  const [menuOpen, setMenuOpen] = useState(false); // State for menu visibility
+  const [currentSection, setCurrentSection] = useState('table'); // Set default section to 'table'
+  const [hoveredRow, setHoveredRow] = useState(null); // Add state for hovered row
+  const [selectedElement, setSelectedElement] = useState('home'); // State for selected element
+  const [selectedMenuButton, setSelectedMenuButton] = useState(0); // State for selected menu button
+  const [selectedFormElement, setSelectedFormElement] = useState('injury'); // State for selected form element, start with 'injury'
+  const [filteredPatients, setFilteredPatients] = useState([]); // Define filteredPatients state
+  const [selectedPatient, setSelectedPatient] = useState(null); // Define selectedPatient state
+  const [open, setOpen] = useState(false); // Define open state
+  const [isEditing, setIsEditing] = useState(false); // Define isEditing state
 
   useEffect(() => {
     // Fetch patients data from the server
@@ -74,28 +108,230 @@ const DoctorDashboard = () => {
         }
       });
 
+    // Remove WebSocket connection
+  }, []); // Remove filteredPatients.length dependency
+
+  useEffect(() => {
+    if (currentSection === 'home') {
+      navigate('/');
+    } else if (currentSection === 'addPatient') {
+      handleClickOpen();
+    } else if (currentSection === 'table') {
+      // Focus on the table
+      document.getElementById('patients-table').scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [currentSection, navigate]); // Remove 'sections' from dependency array
+
+  useEffect(() => {
+    const handleRotateEvent = (event) => {
+      const { direction } = event.detail;
+      if (direction === 'rotate_left') {
+        if (selectedElement === 'home') {
+          setSelectedElement('table');
+        } else if (selectedElement === 'addPatient') {
+          setSelectedElement('home');
+        } else if (selectedElement === 'table') {
+          if (selectedRow === 0) {
+            setSelectedElement('addPatient');
+          } else {
+            setSelectedRow((prevRow) => (prevRow > 0 ? prevRow - 1 : filteredPatients.length - 1));
+          }
+        }
+      } else if (direction === 'rotate_right') {
+        if (selectedElement === 'home') {
+          setSelectedElement('addPatient');
+        } else if (selectedElement === 'addPatient') {
+          setSelectedElement('table');
+        } else if (selectedElement === 'table') {
+          setSelectedRow((prevRow) => (prevRow < filteredPatients.length - 1 ? prevRow + 1 : 0));
+        }
+      }
+    };
+
+    window.addEventListener('rotate_event', handleRotateEvent);
+
+    return () => {
+      window.removeEventListener('rotate_event', handleRotateEvent);
+    };
+  }, [selectedElement, filteredPatients.length, selectedRow]);
+
+  useEffect(() => {
+    const handleRotateEvent = (event) => {
+      const { direction } = event.detail;
+      console.log(`Received rotate event: ${direction}`); // Add this line
+      if (direction === 'rotate_left') {
+        if (selectedElement === 'home') {
+          setSelectedElement('table');
+        } else if (selectedElement === 'addPatient') {
+          setSelectedElement('home');
+        } else if (selectedElement === 'table') {
+          setSelectedElement('addPatient');
+        }
+      } else if (direction === 'rotate_right') {
+        if (selectedElement === 'home') {
+          setSelectedElement('addPatient');
+        } else if (selectedElement === 'addPatient') {
+          setSelectedElement('table');
+        } else if (selectedElement === 'table') {
+          setSelectedElement('home');
+        }
+      }
+    };
+
+    window.addEventListener('rotate_event', handleRotateEvent);
+
+    return () => {
+      window.removeEventListener('rotate_event', handleRotateEvent);
+    };
+  }, [selectedElement]);
+
+  useEffect(() => {
+    console.log(`Selected element: ${selectedElement}`);
+    if (selectedElement === 'home') {
+      document.getElementById('home-button').focus();
+    } else if (selectedElement === 'addPatient') {
+      document.getElementById('add-patient-button').focus();
+    } else if (selectedElement === 'table') {
+      document.getElementById('patients-table').scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [selectedElement]);
+
+  useEffect(() => {
     // Establish WebSocket connection
     const socket = io('http://localhost:5000');
 
     socket.on('rotate_event', (data) => {
       console.log(`Received rotate event: ${data.direction}`);
-      setFilteredPatients(prevFilteredPatients => {
-        if (prevFilteredPatients.length > 0) {
-          if (data.direction === 'rotate_right') {
-            setSelectedRow(prevRow => (prevRow + 1) % prevFilteredPatients.length);
-          } else if (data.direction === 'rotate_left') {
-            setSelectedRow(prevRow => (prevRow - 1 + prevFilteredPatients.length) % prevFilteredPatients.length);
+      if (menuOpen) {
+        // Control the circular menu
+        if (data.direction === 'rotate_right') {
+          setSelectedMenuButton((prevButton) => (prevButton + 1) % 3);
+        } else if (data.direction === 'rotate_left') {
+          setSelectedMenuButton((prevButton) => (prevButton - 1 + 3) % 3);
+        }
+      } else {
+        // Control the main dashboard
+        if (data.direction === 'rotate_right') {
+          if (selectedElement === 'home') {
+            setSelectedElement('addPatient');
+          } else if (selectedElement === 'addPatient') {
+            setSelectedElement('table');
+          } else if (selectedElement === 'table') {
+            setSelectedRow((prevRow) => (prevRow < filteredPatients.length - 1 ? prevRow + 1 : 0));
+          }
+        } else if (data.direction === 'rotate_left') {
+          if (selectedElement === 'table') {
+            if (selectedRow === 0) {
+              setSelectedElement('addPatient');
+            } else {
+              setSelectedRow((prevRow) => (prevRow > 0 ? prevRow - 1 : filteredPatients.length - 1));
+            }
+          } else if (selectedElement === 'addPatient') {
+            setSelectedElement('home');
+          } else if (selectedElement === 'home') {
+            setSelectedElement('table');
           }
         }
-        return prevFilteredPatients;
-      });
+      }
+    });
+
+    socket.on('click_event', () => {
+      console.log('Received click event');
+      if (menuOpen) {
+        // Handle click in circular menu
+        if (selectedMenuButton === 0) {
+          handleEditPatient(selectedPatient);
+        } else if (selectedMenuButton === 1) {
+          handleMenuClose();
+        } else if (selectedMenuButton === 2) {
+          handleDeletePatient(selectedPatient._id); // Directly delete the patient
+        }
+      } else {
+        // Handle click in main dashboard
+        if (selectedElement === 'home') {
+          navigate('/');
+        } else if (selectedElement === 'addPatient') {
+          handleClickOpen();
+        } else if (selectedElement === 'table' && selectedRow !== null) {
+          const selectedPatient = filteredPatients[selectedRow];
+          handleMenuOpen(selectedPatient);
+        }
+      }
     });
 
     return () => {
       socket.disconnect();
       console.log("Socket disconnected");
     };
-  }, []); // Remove filteredPatients.length dependency
+  }, [selectedElement, filteredPatients.length, menuOpen, selectedMenuButton, selectedRow]);
+
+  useEffect(() => {
+    console.log(`Selected element: ${selectedElement}`);
+    if (selectedElement === 'home') {
+      document.getElementById('home-button').focus();
+    } else if (selectedElement === 'addPatient') {
+      document.getElementById('add-patient-button').focus();
+    } else if (selectedElement === 'table') {
+      document.getElementById('patients-table').scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [selectedElement]);
+
+  useEffect(() => {
+    const handleRotateEvent = (event) => {
+      const { direction } = event.detail;
+      if (open) { // Only handle rotation events if the form is open
+        if (direction === 'rotate_left') {
+          if (selectedFormElement === 'injury') {
+            setSelectedFormElement('add');
+          } else if (selectedFormElement === 'exercises') {
+            setSelectedFormElement('injury');
+          } else if (selectedFormElement === 'cancel') {
+            setSelectedFormElement('exercises');
+          } else if (selectedFormElement === 'add') {
+            setSelectedFormElement('cancel');
+          }
+        } else if (direction === 'rotate_right') {
+          if (selectedFormElement === 'injury') {
+            setSelectedFormElement('exercises');
+          } else if (selectedFormElement === 'exercises') {
+            setSelectedFormElement('cancel');
+          } else if (selectedFormElement === 'cancel') {
+            setSelectedFormElement('add');
+          } else if (selectedFormElement === 'add') {
+            setSelectedFormElement('injury');
+          }
+        }
+      } else {
+        if (direction === 'rotate_left') {
+          if (selectedElement === 'home') {
+            setSelectedElement('table');
+          } else if (selectedElement === 'addPatient') {
+            setSelectedElement('home');
+          } else if (selectedElement === 'table') {
+            if (selectedRow === 0) {
+              setSelectedElement('addPatient');
+            } else {
+              setSelectedRow((prevRow) => (prevRow > 0 ? prevRow - 1 : filteredPatients.length - 1));
+            }
+          }
+        } else if (direction === 'rotate_right') {
+          if (selectedElement === 'home') {
+            setSelectedElement('addPatient');
+          } else if (selectedElement === 'addPatient') {
+            setSelectedElement('table');
+          } else if (selectedElement === 'table') {
+            setSelectedRow((prevRow) => (prevRow < filteredPatients.length - 1 ? prevRow + 1 : 0));
+          }
+        }
+      }
+    };
+
+    window.addEventListener('rotate_event', handleRotateEvent);
+
+    return () => {
+      window.removeEventListener('rotate_event', handleRotateEvent);
+    };
+  }, [selectedElement, selectedFormElement, filteredPatients.length, selectedRow, open]);
 
   const handleSearchChange = (event, value) => {
     if (value) {
@@ -121,7 +357,23 @@ const DoctorDashboard = () => {
   };
 
   const handleClickOpen = () => {
-    setOpen(true);
+    axios.get('http://localhost:5000/api/generate_patient_details')
+      .then(response => {
+        setNewPatient({
+          name: response.data.name,
+          tuio_id: response.data.tuio_id,
+          injury: '',
+          exercises: []
+        });
+        setOpen(true);
+        setSelectedFormElement('injury'); // Set initial form element to 'injury'
+      })
+      .catch(error => {
+        console.error('Error generating patient details:', error);
+        setSnackbarMessage('Failed to generate patient details');
+        setSnackbarSeverity('error');
+        setSnackbarOpen(true);
+      });
   };
 
   const handleClose = () => {
@@ -129,6 +381,7 @@ const DoctorDashboard = () => {
     setIsEditing(false);
     setCurrentPatientId(null);
     setNewPatient({ name: '', injury: '', exercises: [] });
+    setSelectedFormElement(null); // Reset form element selection
   };
 
   const handleSnackbarClose = () => {
@@ -225,6 +478,7 @@ const DoctorDashboard = () => {
       setFilteredExercises([]);
     }
     setOpen(true);
+    setSelectedFormElement('injury'); // Set initial form element to 'injury'
   };
 
   const handleUpdatePatient = () => {
@@ -326,25 +580,37 @@ const DoctorDashboard = () => {
     }
   };
 
+  const handleMenuOpen = (patient) => {
+    setSelectedPatient(patient);
+    setMenuOpen(true);
+    setSelectedMenuButton(0); // Reset menu button selection
+  };
+
+  const handleMenuClose = () => {
+    setMenuOpen(false);
+    setSelectedPatient(null);
+  };
+
   return (
-    <Container maxWidth="md">
-      <AppBar position="static" style={{ background: '#5c67f2', marginBottom: '20px' }}>
+    <Container maxWidth="lg" sx={{ paddingTop: '64px', paddingBottom: '20px' }}>
+      <AppBar position="fixed" sx={{ background: '#5c67f2', width: '100%', left: 0, top: 0 }}> {/* Ensure AppBar takes full width */}
         <Toolbar>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Doctor Dashboard
           </Typography>
-          <Button
+          <StyledButton
+            id="home-button"
             variant="contained"
-            color="secondary"
+            color={selectedElement === 'home' ? 'primary' : 'secondary'}
             startIcon={<HomeIcon />}
             onClick={() => navigate('/')}
             sx={{ borderRadius: 20 }}
           >
             Home
-          </Button>
+          </StyledButton>
         </Toolbar>
       </AppBar>
-      <Grid container spacing={2} alignItems="center">
+      <Grid container spacing={2} alignItems="center" sx={{ mt: 2 }}>
         <Grid item xs={12} sm={9}>
           <Autocomplete
             freeSolo
@@ -357,42 +623,46 @@ const DoctorDashboard = () => {
           />
         </Grid>
         <Grid item xs={12} sm={3}>
-          <Button
+          <StyledButton
+            id="add-patient-button"
             variant="contained"
-            color="primary"
+            color={selectedElement === 'addPatient' ? 'primary' : 'default'}
             startIcon={<AddIcon />}
             onClick={handleClickOpen}
             fullWidth
           >
             Add Patient
-          </Button>
+          </StyledButton>
         </Grid>
       </Grid>
-      <Box sx={{ overflowX: 'auto', mt: 2 }}>
-        <TableContainer component={Paper}>
-          <Table>
+      <Box sx={{ overflowX: 'auto', mt: 2 }} id="patients-table">
+        <TableContainer component={Paper} sx={{ maxHeight: '70vh' }}> {/* Increase table height */}
+          <Table stickyHeader> {/* Add stickyHeader for better UX */}
             <TableHead>
               <TableRow>
-                <TableCell>Patient Code</TableCell> {/* Add this line */}
                 <TableCell>Patient Name</TableCell>
                 <TableCell>Injury</TableCell>
                 <TableCell>Exercises</TableCell>
+                <TableCell>TUIO ID</TableCell> {/* Add TUIO ID header */}
                 <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {filteredPatients.map((patient, index) => (
-                <StyledTableRow key={patient._id} selected={index === selectedRow}>
-                  <TableCell>{patient.code}</TableCell> {/* Add this line */}
+                <StyledTableRow
+                  key={patient._id}
+                  selected={index === selectedRow}
+                  className={index === hoveredRow || index === selectedRow ? 'Mui-hovered' : ''} // Add hover and selected class
+                  onMouseEnter={() => setHoveredRow(index)}
+                  onMouseLeave={() => setHoveredRow(null)}
+                >
                   <TableCell>{patient.name}</TableCell>
                   <TableCell>{patient.injury}</TableCell>
                   <TableCell>{patient.exercises.map(ex => ex.name).join(', ')}</TableCell>
+                  <TableCell>{patient.tuio_id}</TableCell> {/* Add TUIO ID cell */}
                   <TableCell>
-                    <IconButton color="primary" onClick={() => handleEditPatient(patient)}>
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton color="secondary" onClick={() => handleOpenDeleteDialog(patient)}>
-                      <DeleteIcon />
+                    <IconButton color="primary" onClick={() => handleMenuOpen(patient)}>
+                      <MoreVertIcon />
                     </IconButton>
                   </TableCell>
                 </StyledTableRow>
@@ -401,6 +671,14 @@ const DoctorDashboard = () => {
           </Table>
         </TableContainer>
       </Box>
+      <CircularMenu
+        open={menuOpen}
+        handleClose={handleMenuClose}
+        handleEditPatient={() => handleEditPatient(selectedPatient)}
+        handleDeletePatient={() => handleDeletePatient(selectedPatient._id)} // Directly delete the patient
+        selectedMenuButton={selectedMenuButton} // Pass selectedMenuButton prop
+        setSelectedMenuButton={setSelectedMenuButton} // Pass setSelectedMenuButton prop
+      />
       <Dialog open={open} onClose={handleClose}>
         <DialogTitle>{isEditing ? 'Edit Patient' : 'Add New Patient'}</DialogTitle>
         <DialogContent>
@@ -415,6 +693,15 @@ const DoctorDashboard = () => {
             fullWidth
             value={newPatient.name}
             onChange={handleChange}
+            disabled // Disable the field to prevent editing
+          />
+          <TextField
+            margin="dense"
+            label="TUIO ID"
+            name="tuio_id"
+            fullWidth
+            value={newPatient.tuio_id}
+            onChange={handleChange}
           />
           <TextField
             select
@@ -424,6 +711,7 @@ const DoctorDashboard = () => {
             fullWidth
             value={newPatient.injury}
             onChange={handleChange}
+            sx={{ border: selectedFormElement === 'injury' ? `2px solid ${brighterBorderColor}` : 'inherit' }} // Highlight border if selected
           >
             {injuries.map((injury) => (
               <MenuItem key={injury._id} value={injury.name}>
@@ -431,7 +719,7 @@ const DoctorDashboard = () => {
               </MenuItem>
             ))}
           </TextField>
-          <FormControl fullWidth margin="dense">
+          <FormControl fullWidth margin="dense" sx={{ border: selectedFormElement === 'exercises' ? `2px solid ${brighterBorderColor}` : 'inherit' }}> {/* Highlight border if selected */}
             <InputLabel>Exercises</InputLabel>
             <Select
               multiple
@@ -448,22 +736,12 @@ const DoctorDashboard = () => {
           </FormControl>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleClose} color="primary">Cancel</Button>
-          <Button onClick={isEditing ? handleUpdatePatient : handleAddPatient} color="primary">
+          <Button onClick={handleClose} color="primary" sx={{ border: selectedFormElement === 'cancel' ? `2px solid ${hoverBorderColor}` : 'inherit' }}> {/* Highlight border if selected */}
+            Cancel
+          </Button>
+          <Button onClick={isEditing ? handleUpdatePatient : handleAddPatient} color="primary" sx={{ border: selectedFormElement === 'add' ? `2px solid ${hoverBorderColor}` : 'inherit' }}> {/* Highlight border if selected */}
             {isEditing ? 'Update' : 'Add'}
           </Button>
-        </DialogActions>
-      </Dialog>
-      <Dialog open={deleteDialogOpen} onClose={handleCloseDeleteDialog}>
-        <DialogTitle>Confirm Delete</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Are you sure you want to delete this patient?
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDeleteDialog} color="primary">Cancel</Button>
-          <Button onClick={handleConfirmDelete} color="secondary">Delete</Button>
         </DialogActions>
       </Dialog>
       <Snackbar open={snackbarOpen} autoHideDuration={6000} onClose={handleSnackbarClose}>
