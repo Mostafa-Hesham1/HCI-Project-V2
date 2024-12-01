@@ -6,15 +6,31 @@ import random
 
 patients_bp = Blueprint('patients', __name__)
 
-def generate_patient_code():
-    # Generate a 4-digit random patient code
-    return ''.join(random.choices('0123456789', k=4))
+def generate_random_name():
+    names = ['Alice', 'Bob', 'Charlie', 'David', 'Eve', 'Frank', 'Grace', 'Hannah', 'Ivy', 'Jack']
+    return random.choice(names)
 
-@patients_bp.route('/api/patients', methods=['GET', 'POST'])
+def generate_unique_tuio_id():
+    existing_ids = set(patients_collection.distinct("tuio_id"))
+    tuio_id = 50
+    while tuio_id in existing_ids:
+        tuio_id += 1
+    return tuio_id
+
+def generate_patient_details():
+    name = generate_random_name()
+    tuio_id = generate_unique_tuio_id()
+    return jsonify({"name": name, "tuio_id": tuio_id}), 200
+
+@patients_bp.route('/generate_patient_details', methods=['GET'])
+def generate_patient_details_route():
+    return generate_patient_details()
+
+@patients_bp.route('/patients', methods=['GET', 'POST'])
 def patients():
     if request.method == 'GET':
         try:
-            patients = list(patients_collection.find({}, {'_id': 1, 'name': 1, 'injury': 1, 'exercises': 1, 'code': 1}))
+            patients = list(patients_collection.find({}, {'_id': 1, 'name': 1, 'injury': 1, 'exercises': 1, 'tuio_id': 1}))
             for patient in patients:
                 patient['_id'] = str(patient['_id'])  # Convert ObjectId to string
                 for exercise in patient.get('exercises', []):
@@ -26,27 +42,23 @@ def patients():
     elif request.method == 'POST':
         try:
             data = request.json
-            patient_code = generate_patient_code()
-            
-            # Ensure no two patients have the same code
-            existing_patient = patients_collection.find_one({"code": patient_code})
-            while existing_patient:
-                patient_code = generate_patient_code()
-                existing_patient = patients_collection.find_one({"code": patient_code})
-            
+            name = data.get('name', generate_random_name())
+            tuio_id = data.get('tuio_id', generate_unique_tuio_id())
+            if tuio_id < 50 or patients_collection.find_one({"tuio_id": tuio_id}):
+                return jsonify({"error": "Invalid or duplicate TUIO ID"}), 400
             patient = {
-                "code": patient_code,
-                "name": data["name"],
+                "name": name,
+                "tuio_id": tuio_id,
                 "injury": data["injury"],
-                "exercises": data["exercises"]  # List of exercises with sets and reps
+                "exercises": data["exercises"]
             }
             result = patients_collection.insert_one(patient)
-            patient['_id'] = str(result.inserted_id)  # Correctly retrieve the ObjectId and convert it
+            patient['_id'] = str(result.inserted_id)
             return jsonify(patient), 201
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 
-@patients_bp.route('/api/patients/<patient_id>', methods=['PUT', 'DELETE'])
+@patients_bp.route('/patients/<patient_id>', methods=['PUT', 'DELETE'])
 def update_or_delete_patient(patient_id):
     if request.method == 'PUT':
         try:
@@ -54,7 +66,7 @@ def update_or_delete_patient(patient_id):
             result = patients_collection.update_one({'_id': ObjectId(patient_id)}, {'$set': data})
             if result.matched_count == 0:
                 return jsonify({"error": "Patient not found"}), 404
-            updated_patient = patients_collection.find_one({'_id': ObjectId(patient_id)}, {'_id': 1, 'name': 1, 'injury': 1, 'exercises': 1, 'code': 1})
+            updated_patient = patients_collection.find_one({'_id': ObjectId(patient_id)}, {'_id': 1, 'name': 1, 'injury': 1, 'exercises': 1, 'code': 1, 'tuio_id': 1})
             updated_patient['_id'] = str(updated_patient['_id'])  # Convert ObjectId to string
             return jsonify(updated_patient), 200
         except Exception as e:
@@ -68,7 +80,7 @@ def update_or_delete_patient(patient_id):
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 
-@patients_bp.route('/api/patients/<patient_id>/exercises', methods=['GET'])
+@patients_bp.route('/patients/<patient_id>/exercises', methods=['GET'])
 def get_patient_exercises(patient_id):
     try:
         patient = patients_collection.find_one({"_id": ObjectId(patient_id)})
@@ -87,7 +99,9 @@ def get_patient_exercises(patient_id):
                     'description': ex['description'],
                     'video_url': ex['video_url'],
                     'sets': assigned_exercises[ex['name']]['sets'],
-                    'reps': assigned_exercises[ex['name']]['reps']
+                    'reps': assigned_exercises[ex['name']]['reps'],
+                    'default_sets': ex['default_sets'],
+                    'default_reps': ex['default_reps']
                 }
                 filtered_exercises.append(filtered_exercise)
         return jsonify(filtered_exercises), 200
