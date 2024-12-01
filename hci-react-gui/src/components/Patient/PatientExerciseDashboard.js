@@ -7,6 +7,7 @@ import {
 import HomeIcon from '@mui/icons-material/Home';
 import MuiAlert from '@mui/material/Alert';
 import { styled } from '@mui/material/styles';
+import io from 'socket.io-client';
 
 const StyledCard = styled(Card)(({ theme }) => ({
   transition: 'box-shadow 0.3s',
@@ -48,6 +49,27 @@ const PatientExerciseDashboard = () => {
         });
     }
   }, [patient]);
+
+  useEffect(() => {
+    // Establish WebSocket connection
+    const socket = io('http://localhost:5000');
+
+    socket.on('login_event', (data) => {
+      console.log('Received login event:', data);
+      if (data.patient) {
+        console.log('Navigating to patient exercises:', data.patient._id);
+        navigate(`/patient/exercises/${data.patient._id}`);
+      } else if (data.doctor) {
+        console.log('Navigating to doctor dashboard');
+        navigate(`/doctor/dashboard`);
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+      console.log("Socket disconnected");
+    };
+  }, [navigate]);
 
   const handleNextExercise = () => {
     if (currentExerciseIndex < exercises.length - 1) {
@@ -160,10 +182,10 @@ const PatientExerciseDashboard = () => {
                       {exercises[currentExerciseIndex].description}
                     </Typography>
                     <Typography variant="body1" component="div">
-                      Sets: {exercises[currentExerciseIndex].default_sets}
+                      Sets: {exercises[currentExerciseIndex].sets}
                     </Typography>
                     <Typography variant="body1" component="div">
-                      Reps: {exercises[currentExerciseIndex].default_reps}
+                      Reps: {exercises[currentExerciseIndex].reps}
                     </Typography>
                     <Box mt={2}>
                       <StyledButton variant="contained" color="primary" onClick={handleDialogOpen}>
@@ -199,7 +221,7 @@ const PatientExerciseDashboard = () => {
         <DialogTitle>Perform Exercise</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Please upload a video while you are performing the exercise for {exercises[currentExerciseIndex]?.default_reps} reps to check if you are doing it the right way.
+            Please upload a video while you are performing the exercise for {exercises[currentExerciseIndex]?.reps} reps to check if you are doing it the right way.
           </DialogContentText>
           <Box mt={2}>
             <input
