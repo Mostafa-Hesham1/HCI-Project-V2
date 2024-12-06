@@ -3,13 +3,10 @@ import face_recognition
 import cv2
 import numpy as np
 
-# Initialize variables
 known_face_encodings = []
 known_face_names = []
 
-# Path to your dataset
 DATASET_PATH = "faces"  # Adjust this path as needed
-
 
 def train_from_dataset(dataset_path):
     """Train the model using images stored in the dataset folder."""
