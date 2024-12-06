@@ -3,69 +3,62 @@ import face_recognition
 import cv2
 import numpy as np
 
-# Initialize variables
+# Constants
+DATASET_PATH = "faces"  
+
+# Known faces and their labels
 known_face_encodings = []
 known_face_names = []
 
-DATASET_PATH = "faces"  
+def load_images_from_folder(folder):
+    """Load images from a folder and return their paths."""
+    return [
+        os.path.join(folder, f) for f in os.listdir(folder) 
+        if os.path.isfile(os.path.join(folder, f))
+    ]
 
 def train_from_dataset(dataset_path):
-    """Train the model using images stored in the dataset folder."""
+    """
+    Train the model by encoding faces from the dataset folder.
+    Each subfolder in the dataset path should correspond to one person.
+    """
     global known_face_encodings, known_face_names
 
-    for person_name in os.listdir(dataset_path):
+    for person_name in filter(lambda p: os.path.isdir(os.path.join(dataset_path, p)), os.listdir(dataset_path)):
         person_folder = os.path.join(dataset_path, person_name)
 
-        if not os.path.isdir(person_folder):
-            continue
-
-        
-        for filename in os.listdir(person_folder):
-            image_path = os.path.join(person_folder, filename)
-
+        for image_path in load_images_from_folder(person_folder):
             try:
-                
                 image = face_recognition.load_image_file(image_path)
                 face_encodings = face_recognition.face_encodings(image)
 
-                if not face_encodings:
+                if face_encodings:
+                    known_face_encodings.append(face_encodings[0])  # Use the first face encoding
+                    known_face_names.append(person_name)
+                    print(f"Trained on {person_name} from {image_path}")
+                else:
                     print(f"No face found in {image_path}. Skipping...")
-                    continue
-
-                # Assuming only the first face is used for encoding
-                face_encoding = face_encodings[0]
-
-                # Append encoding and label
-                known_face_encodings.append(face_encoding)
-                known_face_names.append(person_name)
-                print(f"Trained on {person_name} from {image_path}")
 
             except Exception as e:
                 print(f"Error processing {image_path}: {e}")
 
-
-def detect_faces_in_image(image_path):
-    """Detect faces in a given image and identify them."""
+def recognize_faces_in_image(image_path):
+    """
+    Detect and identify faces in a single image.
+    """
     try:
-        # Load the image
+        # Load image and detect faces
         image = face_recognition.load_image_file(image_path)
-
-        # Find face locations and encodings
         face_locations = face_recognition.face_locations(image)
         face_encodings = face_recognition.face_encodings(image, face_locations)
 
-        face_names = []
-        for face_encoding in face_encodings:
-            matches = face_recognition.compare_faces(known_face_encodings, face_encoding)
-            name = "Unknown"
-
-            # Find the best match for the face
-            face_distances = face_recognition.face_distance(known_face_encodings, face_encoding)
-            best_match_index = np.argmin(face_distances)
-            if matches and matches[best_match_index]:
-                name = known_face_names[best_match_index]
-
-            face_names.append(name)
+        # Match detected faces
+        face_names = [
+            known_face_names[np.argmin(face_recognition.face_distance(known_face_encodings, encoding))]
+            if matches := face_recognition.compare_faces(known_face_encodings, encoding) and True in matches
+            else "Unknown"
+            for encoding in face_encodings
+        ]
 
         # Display results
         for (top, right, bottom, left), name in zip(face_locations, face_names):
@@ -74,60 +67,51 @@ def detect_faces_in_image(image_path):
     except Exception as e:
         print(f"Error detecting faces in {image_path}: {e}")
 
-
-def live_recognition():
-    """Open webcam and perform real-time face recognition."""
+def live_face_recognition():
+    """
+    Open the webcam and perform live face recognition.
+    """
     video_capture = cv2.VideoCapture(0)
 
-    while True:
-        ret, frame = video_capture.read()
-        if not ret:
-            break
+    try:
+        while True:
+            ret, frame = video_capture.read()
+            if not ret:
+                break
 
-        # Convert the image from BGR (OpenCV format) to RGB (face_recognition format)
-        rgb_frame = frame[:, :, ::-1]
+            rgb_frame = frame[:, :, ::-1]  # Convert BGR to RGB
 
-        # Find all the face locations and encodings in the frame
-        face_locations = face_recognition.face_locations(rgb_frame)
-        face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
+            # Detect faces in the frame
+            face_locations = face_recognition.face_locations(rgb_frame)
+            face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
 
-        for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
-            matches = face_recognition.compare_faces(known_face_encodings, face_encoding)
-            name = "Unknown"
+            for (top, right, bottom, left), encoding in zip(face_locations, face_encodings):
+                matches = face_recognition.compare_faces(known_face_encodings, encoding)
+                name = "Unknown"
 
-            # Find the best match for the face
-            face_distances = face_recognition.face_distance(known_face_encodings, face_encoding)
-            best_match_index = np.argmin(face_distances)
-            if matches and matches[best_match_index]:
-                name = known_face_names[best_match_index]
+                if matches and True in matches:
+                    name = known_face_names[np.argmin(face_recognition.face_distance(known_face_encodings, encoding))]
 
-            # Draw a rectangle around the face
-            cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
+                # Draw rectangle and label
+                cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
+                cv2.putText(frame, name, (left, top - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
 
-            # Label the face with a name
-            cv2.putText(frame, name, (left, top - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+            # Show the video feed
+            cv2.imshow('Video', frame)
 
-        # Display the resulting frame
-        cv2.imshow('Video', frame)
-
-       
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-    video_capture.release()
-    cv2.destroyAllWindows()
-
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+    finally:
+        video_capture.release()
+        cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-    # Train the model from the dataset
     print("Training the model...")
     train_from_dataset(DATASET_PATH)
 
     test_image_path = "path_to_test_image.jpg"  # Replace with your test image path
     print("\nDetecting faces in test image...")
-    detect_faces_in_image(test_image_path)
+    recognize_faces_in_image(test_image_path)
 
-    # Start live recognition
     print("\nStarting live recognition...")
-    live_recognition()
-
+    live_face_recognition()
