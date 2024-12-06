@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import io from 'socket.io-client';
 
-const socket = io('http://localhost:5000');
+const socket = io('http://localhost:5001');
 
 function GestureControl({ onNextExercise, onPreviousExercise, onPerformExercise, onNavigateHome }) {
     useEffect(() => {
@@ -39,21 +39,28 @@ function GestureControl({ onNextExercise, onPreviousExercise, onPerformExercise,
     };
 
     const handleGesture = (data) => {
-        console.log('Gesture detected:', data.gesture);
+        const timestamp = new Date().toISOString();
+        console.log(`[${timestamp}] Gesture detected:`, data.gesture); // Log gesture with timestamp
+
         switch(data.gesture) {
             case 'thumbs_up':
+                console.log('Gesture: thumbs_up detected, moving to next exercise');
                 onNextExercise?.();
                 break;
             case 'thumbs_down':
+                console.log('Gesture: thumbs_down detected, moving to previous exercise');
                 onPreviousExercise?.();
                 break;
             case 'swipe_right':
+                console.log('Gesture: swipe_right detected, performing exercise');
                 onPerformExercise?.();
                 break;
             case 'swipe_left':
+                console.log('Gesture: swipe_left detected, navigating to home');
                 onNavigateHome?.();
                 break;
             default:
+                console.log('Unknown gesture detected:', data.gesture);
                 break;
         }
     };

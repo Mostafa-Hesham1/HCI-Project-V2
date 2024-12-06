@@ -18,7 +18,7 @@ const HomeScreen = () => {
     }
 
     // Establish WebSocket connection
-    const socket = io('http://localhost:5000');
+    const socket = io('http://localhost:5001');
 
     socket.on('login_event', (data) => {
       if (data.patient) {
@@ -39,6 +39,9 @@ const HomeScreen = () => {
       console.log('Received redirect_event:', url);  // Add this line for debugging
       window.location.href = url;  // Redirect to the specified URL
     });
+
+    
+
 
     return () => {
       socket.disconnect();

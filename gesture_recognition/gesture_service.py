@@ -67,8 +67,10 @@ class GestureService:
         # Thumbs up/down detection
         if abs(thumb_tip.x - index_tip.x) > 0.1:
             if thumb_tip.y < index_tip.y:
+                print("a3laaaaaaa")
                 return "thumbs_up"
             elif thumb_tip.y > index_tip.y:
+                print("taaaaaaa7t")
                 return "thumbs_down"
 
         # Swipe detection

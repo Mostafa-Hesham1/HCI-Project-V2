@@ -23,6 +23,14 @@ CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 # Initialize SocketIO
 socketio = SocketIO(app, cors_allowed_origins="*")
 
+@socketio.on('connect')
+def handle_connect():
+    print("Client connected")
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    print("Client disconnected")
+
 # Initialize gesture service
 gesture_service = GestureService(socketio)
 
@@ -199,4 +207,4 @@ def cleanup():
 if __name__ == '__main__':
     print("Starting the Flask server with gesture recognition...")
     init_app()
-    socketio.run(app, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5001)
