@@ -2,25 +2,54 @@ import React, { useState, useEffect } from 'react';
 import { Container, Typography, AppBar, Toolbar, Button, Box, Card, CardContent } from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
 import { Parallax, ParallaxProvider } from 'react-scroll-parallax';
+import { io } from 'socket.io-client';
 
 const HomeScreen = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [patient, setPatient] = useState(null);
+  const [user, setUser] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     // Check if the user is logged in
-    const loggedInPatient = JSON.parse(localStorage.getItem('patient'));
-    if (loggedInPatient) {
+    const loggedInUser = JSON.parse(localStorage.getItem('user'));
+    if (loggedInUser) {
       setIsLoggedIn(true);
-      setPatient(loggedInPatient);
+      setUser(loggedInUser);
     }
-  }, []);
+
+    // Establish WebSocket connection
+    const socket = io('http://localhost:5000');
+
+    socket.on('login_event', (data) => {
+      if (data.patient) {
+        const { patient } = data;
+        console.log('Received login_event for patient:', patient);  // Add this line for debugging
+        localStorage.setItem('user', JSON.stringify(patient));
+        navigate('/patient-exercise-dashboard', { state: { patient } });
+      } else if (data.doctor) {
+        const { doctor } = data;
+        console.log('Received login_event for doctor:', doctor);  // Add this line for debugging
+        localStorage.setItem('user', JSON.stringify(doctor));
+        navigate('/doctor-dashboard', { state: { doctor } });
+      }
+    });
+
+    socket.on('redirect_event', (data) => {
+      const { url } = data;
+      console.log('Received redirect_event:', url);  // Add this line for debugging
+      window.location.href = url;  // Redirect to the specified URL
+    });
+
+    return () => {
+      socket.disconnect();
+      console.log("Socket disconnected");
+    };
+  }, [navigate]);
 
   const handleLogout = () => {
-    localStorage.removeItem('patient');
+    localStorage.removeItem('user');
     setIsLoggedIn(false);
-    setPatient(null);
+    setUser(null);
     navigate('/');
   };
 

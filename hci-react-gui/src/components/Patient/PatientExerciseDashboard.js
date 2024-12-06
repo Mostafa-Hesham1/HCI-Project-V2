@@ -7,6 +7,9 @@ import {
 import HomeIcon from '@mui/icons-material/Home';
 import MuiAlert from '@mui/material/Alert';
 import { styled } from '@mui/material/styles';
+import io from 'socket.io-client';
+import GestureControl from '../GestureControl';
+import GestureFeedback from '../GestureFeedback';
 
 const StyledCard = styled(Card)(({ theme }) => ({
   transition: 'box-shadow 0.3s',
@@ -30,11 +33,12 @@ const PatientExerciseDashboard = () => {
   const [patient, setPatient] = useState(location.state?.patient || JSON.parse(localStorage.getItem('patient'))); // Retrieve patient data from state or local storage
   const [exercises, setExercises] = useState([]);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
-  const [selectedFile, setSelectedFile] = useState(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState('success');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [exerciseResult, setExerciseResult] = useState('');
+  const [currentGesture, setCurrentGesture] = useState(null);
 
   useEffect(() => {
     if (patient && patient._id) {
@@ -49,44 +53,61 @@ const PatientExerciseDashboard = () => {
     }
   }, [patient]);
 
+  useEffect(() => {
+    // Establish WebSocket connection
+    const socket = io('http://localhost:5000');
+
+    socket.on('login_event', (data) => {
+      console.log('Received login event:', data);
+      if (data.patient) {
+        console.log('Navigating to patient exercises:', data.patient._id);
+        navigate(`/patient/exercises/${data.patient._id}`);
+      } else if (data.doctor) {
+        console.log('Navigating to doctor dashboard');
+        navigate(`/doctor/dashboard`);
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+      console.log("Socket disconnected");
+    };
+  }, [navigate]);
+
   const handleNextExercise = () => {
     if (currentExerciseIndex < exercises.length - 1) {
       setCurrentExerciseIndex(currentExerciseIndex + 1);
+      setSnackbarMessage('Next exercise');
+      setSnackbarSeverity('info');
+      setSnackbarOpen(true);
     }
   };
 
   const handlePreviousExercise = () => {
     if (currentExerciseIndex > 0) {
       setCurrentExerciseIndex(currentExerciseIndex - 1);
-    }
-  };
-
-  const handleFileChange = (event) => {
-    setSelectedFile(event.target.files[0]);
-  };
-
-  const handleUpload = () => {
-    if (!selectedFile) {
-      setSnackbarMessage('Please select a video file to upload.');
-      setSnackbarSeverity('error');
+      setSnackbarMessage('Previous exercise');
+      setSnackbarSeverity('info');
       setSnackbarOpen(true);
-      return;
     }
+  };
 
-    const formData = new FormData();
-    formData.append('video', selectedFile);
-
-    axios.post('http://localhost:5000/api/upload_exercise_video', formData)
+  const handlePerformExercise = () => {
+    setDialogOpen(false);
+    setExerciseResult('Performing exercise...');
+    const exerciseName = exercises[currentExerciseIndex].name;
+    axios.post('http://localhost:5000/api/start_exercise', { name: exerciseName })
       .then(response => {
-        setSnackbarMessage('Video uploaded successfully');
+        setSnackbarMessage(`Exercise completed successfully. Output: ${response.data.output}`);
         setSnackbarSeverity('success');
         setSnackbarOpen(true);
-        setDialogOpen(false);
+        setExerciseResult(response.data.output);
       })
       .catch(error => {
-        setSnackbarMessage('Error uploading video');
+        setSnackbarMessage('Error performing exercise');
         setSnackbarSeverity('error');
         setSnackbarOpen(true);
+        setExerciseResult('Error performing exercise');
       });
   };
 
@@ -129,6 +150,7 @@ const PatientExerciseDashboard = () => {
           </StyledButton>
         </Toolbar>
       </AppBar>
+      
       <Container maxWidth="md" sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
         <Box my={4} flexGrow={1}>
           <Typography variant="h4" gutterBottom>
@@ -148,7 +170,7 @@ const PatientExerciseDashboard = () => {
                     component="video"
                     controls
                     muted
-                    src={`http://localhost:5000/${exercises[currentExerciseIndex].video_url}`} // Ensure the video URL is correct
+                    src={`http://localhost:5000/${exercises[currentExerciseIndex].video_url}`}
                     title={exercises[currentExerciseIndex].name}
                     sx={{ flexGrow: 1 }}
                   />
@@ -160,15 +182,20 @@ const PatientExerciseDashboard = () => {
                       {exercises[currentExerciseIndex].description}
                     </Typography>
                     <Typography variant="body1" component="div">
-                      Sets: {exercises[currentExerciseIndex].default_sets}
+                      Sets: {exercises[currentExerciseIndex].sets}
                     </Typography>
                     <Typography variant="body1" component="div">
-                      Reps: {exercises[currentExerciseIndex].default_reps}
+                      Reps: {exercises[currentExerciseIndex].reps}
                     </Typography>
                     <Box mt={2}>
-                      <StyledButton variant="contained" color="primary" onClick={handleDialogOpen}>
+                      <StyledButton variant="contained" color="primary" onClick={handlePerformExercise}>
                         Perform Exercise
                       </StyledButton>
+                      {exerciseResult && (
+                        <Typography variant="body1" mt={2}>
+                          Result: {exerciseResult}
+                        </Typography>
+                      )}
                     </Box>
                   </CardContent>
                 </StyledCard>
@@ -195,39 +222,70 @@ const PatientExerciseDashboard = () => {
           )}
         </Box>
       </Container>
+
+      {/* Gesture Control Integration */}
+      <GestureControl 
+        onNextExercise={handleNextExercise}
+        onPreviousExercise={handlePreviousExercise}
+        onPerformExercise={handlePerformExercise}
+        onNavigateHome={() => navigate('/')}
+        onGestureDetected={setCurrentGesture}
+      />
+      <GestureFeedback gesture={currentGesture} />
+      
+      {/* Gesture Guide */}
+      <Box 
+        position="fixed" 
+        bottom={20} 
+        right={20} 
+        p={2} 
+        bgcolor="rgba(0,0,0,0.1)" 
+        borderRadius={2}
+        sx={{ 
+          backdropFilter: 'blur(10px)',
+          zIndex: 1000,
+          boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+          border: '1px solid rgba(255,255,255,0.1)'
+        }}
+      >
+        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+          Gesture Controls:
+          <br />
+          Thumbs Up: Next Exercise
+          <br />
+          Thumbs Down: Previous Exercise
+          <br />
+          Swipe Right: Perform Exercise
+          <br />
+          Swipe Left: Return Home
+        </Typography>
+      </Box>
+
       <Dialog open={dialogOpen} onClose={handleDialogClose}>
         <DialogTitle>Perform Exercise</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Please upload a video while you are performing the exercise for {exercises[currentExerciseIndex]?.default_reps} reps to check if you are doing it the right way.
+            Click the button below to start performing the exercise.
           </DialogContentText>
-          <Box mt={2}>
-            <input
-              accept="video/*"
-              style={{ display: 'none' }}
-              id="upload-video"
-              type="file"
-              onChange={handleFileChange}
-            />
-            <label htmlFor="upload-video">
-              <StyledButton variant="contained" color="primary" component="span">
-                Select Video
-              </StyledButton>
-            </label>
-            {selectedFile && <Typography variant="body2" mt={1}>{selectedFile.name}</Typography>}
-          </Box>
         </DialogContent>
         <DialogActions>
           <StyledButton onClick={handleDialogClose} color="primary">
             Cancel
           </StyledButton>
-          <StyledButton onClick={handleUpload} color="primary">
-            Upload Video
+          <StyledButton onClick={handlePerformExercise} color="primary">
+            Perform Exercise
           </StyledButton>
         </DialogActions>
       </Dialog>
+
       <Snackbar open={snackbarOpen} autoHideDuration={6000} onClose={handleSnackbarClose}>
-        <MuiAlert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
+        <MuiAlert 
+          elevation={6} 
+          variant="filled" 
+          onClose={handleSnackbarClose} 
+          severity={snackbarSeverity} 
+          sx={{ width: '100%' }}
+        >
           {snackbarMessage}
         </MuiAlert>
       </Snackbar>
