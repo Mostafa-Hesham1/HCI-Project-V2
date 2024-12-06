@@ -10,9 +10,10 @@ from routes.exercises import exercises_bp
 import os
 import random
 import string
-import bluetooth
+# import bluetooth
 import asyncio
 import aiohttp
+import subprocess
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -112,13 +113,15 @@ def get_patient_exercises(patient_id):
 
 @app.route('/api/upload_exercise_video', methods=['POST'])
 def upload_exercise_video():
-    if 'video' not in request.files:
-        return jsonify({"error": "No video file provided"}), 400
-    video = request.files['video']
-    if video.filename == '':
-        return jsonify({"error": "No selected file"}), 400
-    video.save(os.path.join('uploads', video.filename))
-    return jsonify({"message": "Video uploaded successfully"}), 200
+    # Call the new function before uploading the video
+    try:
+        result = subprocess.run(['python', 'knee_flex.py'], capture_output=True, text=True, timeout=60)
+        output = result.stdout.strip()
+        return jsonify({"message": "Exercise completed successfully", "output": output}), 200
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "Exercise timed out"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/patient/plan', methods=['GET'])
 def get_patient_plan():
@@ -165,6 +168,7 @@ def generate_patient_details_route():
 @app.route('/')
 def index():
     return "TUIO Server Running"
+
 
 # Store received TUIO IDs
 received_tuio_ids = set()
@@ -219,6 +223,17 @@ def handle_bluetooth_device():
     else:
         return jsonify({"status": "error", "message": "No matching doctor found"}), 404
 
+@app.route('/api/start_exercise', methods=['POST'])
+def start_exercise():
+    try:
+        result = subprocess.run(['python', 'knee_flex.py'], capture_output=True, text=True, timeout=60)
+        output = result.stdout.strip()
+        return jsonify({"status": "success", "output": output}), 200
+    except subprocess.TimeoutExpired:
+        return jsonify({"status": "error", "message": "Exercise timed out"}), 500
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.after_request
 def after_request(response):
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
@@ -240,10 +255,6 @@ async def discover_bluetooth_devices():
             print(f" {addr} - {name}")
             await send_bluetooth_device(addr, name)
 
-        await asyncio.sleep(60)  # Wait for 60 seconds before the next discovery
-
 if __name__ == '__main__':
-    test_db_connection()
-    loop = asyncio.get_event_loop()
-    loop.create_task(discover_bluetooth_devices())
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    print("Starting the Flask server...")  # Add this line for debugging
+    socketio.run(app, debug=True)

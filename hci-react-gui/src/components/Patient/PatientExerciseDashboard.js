@@ -31,11 +31,11 @@ const PatientExerciseDashboard = () => {
   const [patient, setPatient] = useState(location.state?.patient || JSON.parse(localStorage.getItem('patient'))); // Retrieve patient data from state or local storage
   const [exercises, setExercises] = useState([]);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
-  const [selectedFile, setSelectedFile] = useState(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState('success');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [exerciseResult, setExerciseResult] = useState('');
 
   useEffect(() => {
     if (patient && patient._id) {
@@ -83,32 +83,22 @@ const PatientExerciseDashboard = () => {
     }
   };
 
-  const handleFileChange = (event) => {
-    setSelectedFile(event.target.files[0]);
-  };
-
-  const handleUpload = () => {
-    if (!selectedFile) {
-      setSnackbarMessage('Please select a video file to upload.');
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append('video', selectedFile);
-
-    axios.post('http://localhost:5000/api/upload_exercise_video', formData)
+  const handlePerformExercise = () => {
+    setDialogOpen(false); // Close the dialog window
+    setExerciseResult('Performing exercise...'); // Set initial result message
+    const exerciseName = exercises[currentExerciseIndex].name;
+    axios.post('http://localhost:5000/api/start_exercise', { name: exerciseName })
       .then(response => {
-        setSnackbarMessage('Video uploaded successfully');
+        setSnackbarMessage(`Exercise completed successfully. Output: ${response.data.output}`);
         setSnackbarSeverity('success');
         setSnackbarOpen(true);
-        setDialogOpen(false);
+        setExerciseResult(response.data.output); // Set the exercise result
       })
       .catch(error => {
-        setSnackbarMessage('Error uploading video');
+        setSnackbarMessage('Error performing exercise');
         setSnackbarSeverity('error');
         setSnackbarOpen(true);
+        setExerciseResult('Error performing exercise'); // Set error message
       });
   };
 
@@ -191,6 +181,11 @@ const PatientExerciseDashboard = () => {
                       <StyledButton variant="contained" color="primary" onClick={handleDialogOpen}>
                         Perform Exercise
                       </StyledButton>
+                      {exerciseResult && (
+                        <Typography variant="body1" mt={2}>
+                          Result: {exerciseResult}
+                        </Typography>
+                      )}
                     </Box>
                   </CardContent>
                 </StyledCard>
@@ -221,30 +216,15 @@ const PatientExerciseDashboard = () => {
         <DialogTitle>Perform Exercise</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Please upload a video while you are performing the exercise for {exercises[currentExerciseIndex]?.reps} reps to check if you are doing it the right way.
+            Click the button below to start performing the exercise.
           </DialogContentText>
-          <Box mt={2}>
-            <input
-              accept="video/*"
-              style={{ display: 'none' }}
-              id="upload-video"
-              type="file"
-              onChange={handleFileChange}
-            />
-            <label htmlFor="upload-video">
-              <StyledButton variant="contained" color="primary" component="span">
-                Select Video
-              </StyledButton>
-            </label>
-            {selectedFile && <Typography variant="body2" mt={1}>{selectedFile.name}</Typography>}
-          </Box>
         </DialogContent>
         <DialogActions>
           <StyledButton onClick={handleDialogClose} color="primary">
             Cancel
           </StyledButton>
-          <StyledButton onClick={handleUpload} color="primary">
-            Upload Video
+          <StyledButton onClick={handlePerformExercise} color="primary">
+            Perform Exercise
           </StyledButton>
         </DialogActions>
       </Dialog>

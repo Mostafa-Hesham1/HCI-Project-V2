@@ -11,7 +11,7 @@ import { styled } from '@mui/material/styles';
 import Autocomplete from '@mui/material/Autocomplete'; // Import Autocomplete
 import { useNavigate } from 'react-router-dom'; // Import useNavigate
 import MoreVertIcon from '@mui/icons-material/MoreVert'; // Import MoreVert icon
-import CircularMenu from './CircularMenu'; // Import CircularMenu
+import CircularMenu from '../CircularMenu'; // Import CircularMenu
 import io from 'socket.io-client'; // Add this import
 
 const hoverAndSelectedColor = '#ff9800'; // Change to a different color (e.g., orange)

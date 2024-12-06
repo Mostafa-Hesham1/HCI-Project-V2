@@ -31,6 +31,8 @@ using System.Net.Sockets;
 using System.Text;
 using System.Net.Http;  // For HttpClient and StringContent
 using Newtonsoft.Json;  // For JsonConvert
+using System.Timers;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement.TaskbarClock;
 
 
 
@@ -61,7 +63,13 @@ public class TuioDemo : Form, TuioListener
     private float rightMarkerX = 0, rightMarkerY = 0;
     private bool isGoodStretch = false;
     private int stretchCount = 0;
-   // public bool patientList = false;
+    // public bool patientList = false;
+    private System.Timers.Timer idTimer;
+    private bool isIdVisible = false;
+    private const int targetId = 12;// Target ID to track
+    private const double requiredTime = 5000; // 5 seconds in milliseconds
+    private Dictionary<long, DateTime> objectDetectionTimes = new Dictionary<long, DateTime>();
+    private const double detectionThreshold = 5000; // 5 seconds
 
     public string serverIP = "DESKTOP-8161GCK"; // IP address of the Python server
     public int port = 8000;               // Port number matching the Python server
@@ -79,6 +87,9 @@ public class TuioDemo : Form, TuioListener
     NetworkStream stream;
     public TuioDemo(int port)
     {
+        idTimer = new System.Timers.Timer(requiredTime);
+        idTimer.AutoReset = false;
+        idTimer.Elapsed += OnIdTimerElapsed;
 
         verbose = false;
         fullscreen = true;
@@ -121,11 +132,17 @@ public class TuioDemo : Form, TuioListener
         stream = client1.GetStream();
 
     }
+    private void OnIdTimerElapsed(object sender, ElapsedEventArgs e)
+    {
+        // The ID has been visible for 5 seconds, trigger click event
+        SendClickMessage();
+        idTimer.Stop();
+    }
 
     private void Form_KeyDown(object sender, System.Windows.Forms.KeyEventArgs e)
     {
 
-        if (e.KeyData == Keys.F1 )
+        if (e.KeyData == Keys.F1)
         {
             if (fullscreen == false)
             {
@@ -180,21 +197,7 @@ public class TuioDemo : Form, TuioListener
     List<patient> patients = new List<patient>();
     void readpatient()
     {
-      StreamReader SR = new StreamReader("Users.txt");
-        while (!SR.EndOfStream)
-        {
-
-            string line = SR.ReadLine();
-            string[] temp = line.Split(',');
-            patient pnn = new patient();
-            pnn.id = temp[0];
-            pnn.name = temp[1];
-            pnn.inj = temp[2];
-            pnn.exer = temp[3];
-            //MessageBox.Show("" + temp[0] + temp[1] + temp[2] + temp[3]);
-            patients.Add(pnn);
-        }
-        SR.Close();
+       
     }
     private void Form_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
@@ -207,6 +210,22 @@ public class TuioDemo : Form, TuioListener
 
     public void addTuioObject(TuioObject o)
     {
+        if (o.SymbolID == targetId)
+        {
+            if (!isIdVisible)
+            {
+                isIdVisible = true;
+                idTimer.Start(); // Start the timer when the target ID appears
+            }
+        }
+        if (o.SymbolID >= 50)
+        {
+            // Track the time when the object with ID 50 is first detected
+            if (!objectDetectionTimes.ContainsKey(o.SessionID))
+            {
+                objectDetectionTimes[o.SessionID] = DateTime.Now;
+            }
+        }
         lock (objectList)
         {
             objectList.Add(o.SessionID, o);
@@ -217,8 +236,24 @@ public class TuioDemo : Form, TuioListener
     public void updateTuioObject(TuioObject o)
     {
         if (verbose) Console.WriteLine("set obj " + o.SymbolID + " " + o.SessionID + " " + o.X + " " + o.Y + " " + o.Angle + " " + o.MotionSpeed + " " + o.RotationSpeed + " " + o.MotionAccel + " " + o.RotationAccel);
+        if (o.SymbolID >= 50)
+        {
+            // Check if the object with ID 50 has been visible for 5 seconds
+            if (objectDetectionTimes.ContainsKey(o.SessionID))
+            {
+                DateTime detectionTime = objectDetectionTimes[o.SessionID];
+                TimeSpan elapsed = DateTime.Now - detectionTime;
 
-        if (o.SymbolID == 1)
+                if (elapsed.TotalMilliseconds >= detectionThreshold)
+                {
+                    // Send data after 5 seconds of detection
+                    SendMarkerIdAsync(o.SymbolID); // You can send additional data if needed
+                    objectDetectionTimes.Remove(o.SessionID); // Remove after sending
+                }
+            }
+        }
+
+        if (o.SymbolID == 10)
         {  // Directly handle rotation ID
             UpdateSelectedIdBasedOnRotation(o);
         }
@@ -252,7 +287,13 @@ public class TuioDemo : Form, TuioListener
 
             Invalidate(); // Refresh the form to update UI with new information
         }
+        if (o.SymbolID == targetId && !isIdVisible)
+        {
+            isIdVisible = true;
+            idTimer.Start(); // Start or reset the timer when the target ID updates
+        }
     }
+
 
 
     public void removeTuioObject(TuioObject o)
@@ -262,7 +303,18 @@ public class TuioDemo : Form, TuioListener
             objectList.Remove(o.SessionID);
         }
         if (verbose) Console.WriteLine("del obj " + o.SymbolID + " (" + o.SessionID + ")");
+        if (o.SymbolID >= 50 && objectDetectionTimes.ContainsKey(o.SessionID))
+        {
+            // Remove detection time if the object with ID 50 is removed
+            objectDetectionTimes.Remove(o.SessionID);
+        }
+        if (o.SymbolID == targetId)
+        {
+            isIdVisible = false;
+            idTimer.Stop(); // Stop the timer if the target ID disappears
+        }
     }
+
 
     public void addTuioCursor(TuioCursor c)
     {
@@ -338,8 +390,8 @@ public class TuioDemo : Form, TuioListener
             float x = 0;
             float y = 0;
             float rowHeight = 30f;
-             float colWidth = 150f;
-             float padding = 10f;
+            float colWidth = 150f;
+            float padding = 10f;
             Pen pen = new Pen(Color.Black, 2);
 
             string[] headers = { "ID", "Name", "Injury", "Exercise" };
@@ -433,11 +485,11 @@ public class TuioDemo : Form, TuioListener
                             for (int i = 0; i < patients.Count; i++)
                             {
                                 patient p = patients[i];
-                                int currentPatientId = int.Parse(p.id); 
+                                int currentPatientId = int.Parse(p.id);
 
                                 if (currentPatientId == selected_id)
                                 {
-                                    g.FillRectangle(Brushes.Red, new RectangleF(50, 100 + (i + 1) * rowHeight, 600, rowHeight)); 
+                                    g.FillRectangle(Brushes.Red, new RectangleF(50, 100 + (i + 1) * rowHeight, 600, rowHeight));
                                     string[] patientInfo = { p.id, p.name, p.inj, p.exer };
                                     for (int j = 0; j < patientInfo.Length; j++)
                                         g.DrawString(patientInfo[j], tableFont, tableBrush, new PointF(50 + (j * colWidth) + padding, 100 + ((i + 1) * rowHeight) + padding));
@@ -475,6 +527,7 @@ public class TuioDemo : Form, TuioListener
         float currentAngle = tobj.Angle * (180 / (float)Math.PI);  // Convert radians to degrees
         currentAngle = NormalizeAngle(currentAngle);
         float angleDifference = currentAngle - previousAngle;
+        // Check if the marker ID is greater than 50 and send it to the socket
 
         // Ensure that the difference is greater than the smoothing factor
         if (Math.Abs(angleDifference) > minAngleDifference)
@@ -519,7 +572,23 @@ public class TuioDemo : Form, TuioListener
             Console.WriteLine("Socket error: " + e.Message);
         }
     }
-   
+    private async void SendClickMessage()
+    {
+        try
+        {
+            string message = "click\n";  // Define the message content for a click event
+            byte[] data = Encoding.UTF8.GetBytes(message);
+
+            await stream.WriteAsync(data, 0, data.Length);
+            Console.WriteLine("Sent click event due to ID 11 detected for 5 seconds");
+            await stream.FlushAsync();  // Ensure the message is sent immediately
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine("Error sending click message: " + e.Message);
+        }
+    }
+
 
 
     private float NormalizeAngle(float angle)
@@ -527,6 +596,22 @@ public class TuioDemo : Form, TuioListener
         while (angle < 0) angle += 360;
         while (angle >= 360) angle -= 360;
         return angle;
+    }
+    public async void SendMarkerIdAsync(int markerId)
+    {
+        try
+        {
+            string message = $"marker_id:{markerId}\n";
+            byte[] data = Encoding.UTF8.GetBytes(message);
+
+            await stream.WriteAsync(data, 0, data.Length);
+            Console.WriteLine($"Sent marker ID: {markerId}");
+            await stream.FlushAsync(); // Flush to ensure data is sent immediately
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine("Socket error: " + e.Message);
+        }
     }
 
     public static void Main(String[] argv)
